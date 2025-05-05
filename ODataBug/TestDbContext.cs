@@ -1,7 +1,10 @@
-﻿using System.Text.Json;
+﻿using System.Reflection;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Test;
@@ -78,6 +81,17 @@ public class TestDbContext(IConfiguration configuration) : DbContext
                     })
                 });
         modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
+
+        // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping
+        // See: https://www.sqlite.org/json1.html#the_json_extract_function
+        modelBuilder.HasDbFunction(
+            CustomFilterBinder.GetJsonExtractMethod())
+            .HasName("json_extract");
+
+        modelBuilder.Entity<Customer>()
+        .Property<string>("NameJson") // shadow or real property
+        .HasColumnName("Name") // actual database column
+        .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
     }
 }
 
