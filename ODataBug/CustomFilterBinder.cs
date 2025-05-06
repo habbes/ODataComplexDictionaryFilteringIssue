@@ -24,11 +24,11 @@ public class CustomFilterBinder : FilterBinder
             var namePropertyAccess = Expression.Property(source, complexNode.Property.Name);
 
             var jsonExtractMethod = GetExtactJsonMethod();
-            var jsonPath = Expression.Constant($"$.{locale}");
+            var jsonPath = Expression.Constant(locale);
             var callJsonExtract = Expression.Call(
                 jsonExtractMethod,
                 Expression.Convert(namePropertyAccess, typeof(string)),
-                jsonPath
+                Expression.Convert(jsonPath, typeof(string))
             );
 
             return callJsonExtract;
@@ -72,7 +72,7 @@ public class CustomFilterBinder : FilterBinder
         return base.BindCollectionOpenPropertyAccessNode(openCollectionNode, context);
     }
 
-    [DbFunction("jsonb_extract_path", IsBuiltIn = true)]
+    [DbFunction("json_extract_path", IsBuiltIn = true)]
     public static string ExtractJson(string json, string locale) => throw new NotSupportedException();
 
     public static MethodInfo GetExtactJsonMethod() =>

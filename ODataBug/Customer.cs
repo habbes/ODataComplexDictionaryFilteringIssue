@@ -6,5 +6,5 @@ public class Customer
 {
     public int Id { get; set; }
     
-    public required LocalizableString Name { get; set; }
+    public LocalizableString Name { get; set; }
 }

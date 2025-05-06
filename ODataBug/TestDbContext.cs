@@ -8,6 +8,13 @@ using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using static Test.CustomFilterBinder;
+using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Query.Internal;
+using static Test.JsonExtractTextExpression;
+using Microsoft.Extensions.Options;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.Internal;
+using Microsoft.EntityFrameworkCore.Sqlite.Query.Internal;
 
 namespace Test;
 
@@ -32,7 +39,13 @@ public class TestDbContext(IConfiguration configuration) : DbContext
         }
         else if (dbKind == "postgres")
         {
-            optionsBuilder.UseNpgsql("Host=localhost;Database=TestDb;Username=postgres;Password=postgres")
+            optionsBuilder.UseNpgsql("Host=localhost;Database=TestDb;Username=postgres;Password=postgres", o =>
+            {
+                o.UseRelationalNulls(true);
+            })
+                .ReplaceService<SqlNullabilityProcessor, CustomSqlNullabilityProcessor>() // new
+                .ReplaceService<NpgsqlQuerySqlGenerator, CustomNpgsqlQuerySqlGenerator>() // new
+
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Trace)
                 .EnableSensitiveDataLogging();
         }
@@ -55,39 +68,50 @@ public class TestDbContext(IConfiguration configuration) : DbContext
         //        }
         //    );
 
-        //modelBuilder.Entity<Customer>().Property(c => c.Name).HasColumnType("jsonb");
-            //.HasData(
-            //    new Customer
-            //    {
-            //        Id = 1,
-            //        Name = new LocalizableString(new Dictionary<string, string>
-            //        {
-            //            { "en", "John Doe" },
-            //            { "fr", "Jean Dupont" }
-            //        })
-            //    },
-            //    new Customer
-            //    {
-            //        Id = 2,
-            //        Name = new LocalizableString(new Dictionary<string, string>
-            //        {
-            //            { "en", "Robert Williams" },
-            //            { "fr", "Robert Guillaume" }
-            //        })
-            //    },
-            //    new Customer
-            //    {
-            //        Id = 3,
-            //        Name = new LocalizableString(new Dictionary<string, string>
-            //        {
-            //            { "en", "John Smith" },
-            //            { "fr", "Jean Lefevre" }
-            //        })
-            //    });
+        modelBuilder.Entity<Customer>()
+            .HasData(
+                new Customer
+                {
+                    Id = 1,
+                    Name = new LocalizableString(new Dictionary<string, string>
+                    {
+                        { "en", "John Doe" },
+                        { "fr", "Jean Dupont" }
+                    })
+                },
+                new Customer
+                {
+                    Id = 2,
+                    Name = new LocalizableString(new Dictionary<string, string>
+                    {
+                        { "en", "Robert Williams" },
+                        { "fr", "Robert Guillaume" }
+                    })
+                },
+                new Customer
+                {
+                    Id = 3,
+                    Name = new LocalizableString(new Dictionary<string, string>
+                    {
+                        { "en", "John Smith" },
+                        { "fr", "Jean Lefevre" }
+                    })
+                });
+
+        //.Property(c => c.Name).HasColumnType("jsonb")
         modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
 
+        // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping#mapping-a-method-to-a-custom-sql
         modelBuilder.HasDbFunction(
-            CustomFilterBinder.GetExtactJsonMethod(), b => b.HasName("jsonb_extract_path_text"));
+            CustomFilterBinder.GetExtactJsonMethod())
+            .HasTranslation(
+            args =>
+                new JsonExtractTextExpression(
+                        args.First(),
+                        args.Skip(1).First(),
+                        new StringTypeMapping("jsonb", System.Data.DbType.String)
+                    )
+            );
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -121,38 +145,110 @@ public static class Extensions
     }
 }
 
-public class JsonExtractTextTranslator : IMethodCallTranslator
+public class JsonExtractTextExpression : SqlExpression
 {
-    private static readonly MethodInfo _methodInfo = GetExtactJsonMethod();
+    public SqlExpression JsonColumn { get; }
+    public SqlExpression Path { get; }
 
-    private readonly ISqlExpressionFactory _sqlExpressionFactory;
-
-    public JsonExtractTextTranslator(ISqlExpressionFactory sqlExpressionFactory)
+    public JsonExtractTextExpression(SqlExpression jsonColumn, SqlExpression path, RelationalTypeMapping typeMapping)
+        : base(typeof(string), typeMapping)
     {
-        _sqlExpressionFactory = sqlExpressionFactory;
+        JsonColumn = jsonColumn;
+        Path = path;
     }
 
-    public SqlExpression Translate(
-        SqlExpression instance,
-        MethodInfo method,
-        IReadOnlyList<SqlExpression> arguments,
-        IDiagnosticsLogger<DbLoggerCategory.Query> logger)
+    protected override Expression VisitChildren(ExpressionVisitor visitor)
     {
-        if (method == _methodInfo)
-        {
-            // Create JSONB ->> TEXT translation
-            var jsonColumn = arguments[0];
-            var propertyName = arguments[1];
+        var json = (SqlExpression)visitor.Visit(JsonColumn);
+        var path = (SqlExpression)visitor.Visit(Path);
 
-            return _sqlExpressionFactory.Function(
-                "->>",
-                new[] { jsonColumn, propertyName },
-                nullable: false,
-                argumentsPropagateNullability: null,
-                returnType: typeof(string)
-            );
+        if (json != JsonColumn || path != Path)
+        {
+            return new JsonExtractTextExpression(json, path, TypeMapping);
         }
 
-        return null!;
+        return this;
+    }
+
+    protected override void Print(ExpressionPrinter expressionPrinter)
+    {
+        expressionPrinter.Visit(JsonColumn);
+        expressionPrinter.Append(" ->> ");
+        expressionPrinter.Visit(Path);
+    }
+
+    //protected override Expression Accept(ExpressionVisitor visitor)
+    //{
+    //    if (visitor is QuerySqlGenerator querySqlGenerator)
+    //    {
+    //        return querySqlGenerator is NpgsqlQuerySqlGenerator npgsqlGenerator
+    //            ? npgsqlGenerator.VisitJsonExtractText(this)
+    //            : querySqlGenerator.VisitExtension(this);
+    //    }
+
+    //    return base.Accept(visitor);
+    //}
+
+    public override bool Equals(object obj)
+    {
+        return obj is JsonExtractTextExpression other &&
+            base.Equals(other) &&
+            JsonColumn.Equals(other.JsonColumn) &&
+            Path.Equals(other.Path);
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(base.GetHashCode(), JsonColumn, Path);
+    }
+
+    public class CustomNpgsqlQuerySqlGenerator : NpgsqlQuerySqlGenerator
+    {
+        public CustomNpgsqlQuerySqlGenerator(
+            QuerySqlGeneratorDependencies dependencies,
+            IRelationalTypeMappingSource typeMappingSource,
+            bool reverseNullOrderingEnabled,
+            Version postgresVersion)
+            : base(dependencies, typeMappingSource, reverseNullOrderingEnabled, postgresVersion)
+        {
+        }
+
+        protected override Expression VisitExtension(Expression extensionExpression)
+        {
+            if (extensionExpression is JsonExtractTextExpression jsonExtract)
+            {
+                Sql.Append("(");
+                Visit(jsonExtract.JsonColumn);
+                Sql.Append(" ->> ");
+                Visit(jsonExtract.Path);
+                Sql.Append(")");
+
+                return extensionExpression;
+            }
+
+            return base.VisitExtension(extensionExpression);
+        }
+    }
+}
+
+public class CustomSqlNullabilityProcessor : NpgsqlSqlNullabilityProcessor
+{
+    public CustomSqlNullabilityProcessor(RelationalParameterBasedSqlProcessorDependencies dependencies, bool useRelationalNulls)
+        : base(dependencies, useRelationalNulls)
+    {
+    }
+
+    protected override SqlExpression VisitCustomSqlExpression(
+        SqlExpression sqlExpression,
+        bool allowOptimizedExpansion,
+        out bool nullable)
+    {
+        if (sqlExpression is JsonExtractTextExpression)
+        {
+            nullable = true; // or false depending on your logic
+            return sqlExpression; // Return the same expression or a modified one
+        }
+
+        return base.VisitCustomSqlExpression(sqlExpression, allowOptimizedExpansion, out nullable);
     }
 }
