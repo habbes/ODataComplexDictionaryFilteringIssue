@@ -2,6 +2,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Test;
 
@@ -41,16 +42,28 @@ public sealed class LocalizableString
         _dictionary = new ReadOnlyDictionary<string, string>(dictionary);
     }
 
+    [NotMapped]
     /// <summary>
     /// Gets the extended properties used with OData query.
     /// </summary>
-    public IDictionary<string, object> ExtendedProperties
+    public Dictionary<string, object> ExtendedProperties
     {
         get
         {
             return _dictionary.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value);
         }
+        set
+        {
+            _dictionary = new ReadOnlyDictionary<string, string>(value.ToDictionary(kvp => kvp.Key, kvp => (string)kvp.Value));
+        }
     }
+
+    public static explicit operator string(LocalizableString d)
+    {
+        return JsonSerializer.Serialize(d);
+    }
+
+    public static explicit operator LocalizableString(string b) => JsonSerializer.Deserialize<LocalizableString>(b);
 
     internal static bool AreEqual(LocalizableString? left, LocalizableString? right)
     {
@@ -90,7 +103,7 @@ public sealed class LocalizableString
     /// <param name="key">The language id.</param>
     /// <returns>The translation.</returns>
     /// <exception cref="KeyNotFoundException">The language id does not exist.</exception>"
-    public string this[string key]
+    public object this[string key]
     {
         get { return _dictionary[key]; }
     }
@@ -109,6 +122,8 @@ public sealed class LocalizableString
 
             JsonSerializer.Serialize(writer, value._dictionary, options);
         }
+
+        
     }
 }
 

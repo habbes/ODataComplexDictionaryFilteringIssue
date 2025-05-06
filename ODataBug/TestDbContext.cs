@@ -1,8 +1,13 @@
-﻿using System.Text.Json;
+﻿using System.Reflection;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using static Test.CustomFilterBinder;
 
 namespace Test;
 
@@ -25,7 +30,7 @@ public class TestDbContext(IConfiguration configuration) : DbContext
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Trace)
                 .EnableSensitiveDataLogging();
         }
-        else if (dbKind == "posgres")
+        else if (dbKind == "postgres")
         {
             optionsBuilder.UseNpgsql("Host=localhost;Database=TestDb;Username=postgres;Password=postgres")
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Trace)
@@ -40,44 +45,57 @@ public class TestDbContext(IConfiguration configuration) : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        modelBuilder.Entity<Customer>()
-            //.OwnsOne(customer => customer.Name,
-            //    nameBuilder =>
+        //modelBuilder.Entity<Customer>()
+        //    .OwnsOne(customer => customer.Name,
+        //        nameBuilder =>
+        //        {
+        //            nameBuilder.ToJson();
+        //            nameBuilder.Ignore(n => n.ExtendedProperties);
+        //            //nameBuilder.OwnsOne(n => n.ExtendedProperties);
+        //        }
+        //    );
+
+        //modelBuilder.Entity<Customer>().Property(c => c.Name).HasColumnType("jsonb");
+            //.HasData(
+            //    new Customer
             //    {
-            //        nameBuilder.ToJson();
-            //        nameBuilder.Ignore(n => n.ExtendedProperties);
-            //        //nameBuilder.OwnsOne(n => n.ExtendedProperties);
-            //    }
-            //)
-            .HasData(
-                new Customer
-                {
-                    Id = 1,
-                    Name = new LocalizableString(new Dictionary<string, string>
-                    {
-                        { "en", "John Doe" },
-                        { "fr", "Jean Dupont" }
-                    })
-                },
-                new Customer
-                {
-                    Id = 2,
-                    Name = new LocalizableString(new Dictionary<string, string>
-                    {
-                        { "en", "Robert Williams" },
-                        { "fr", "Robert Guillaume" }
-                    })
-                },
-                new Customer
-                {
-                    Id = 3,
-                    Name = new LocalizableString(new Dictionary<string, string>
-                    {
-                        { "en", "John Smith" },
-                        { "fr", "Jean Lefevre" }
-                    })
-                });
+            //        Id = 1,
+            //        Name = new LocalizableString(new Dictionary<string, string>
+            //        {
+            //            { "en", "John Doe" },
+            //            { "fr", "Jean Dupont" }
+            //        })
+            //    },
+            //    new Customer
+            //    {
+            //        Id = 2,
+            //        Name = new LocalizableString(new Dictionary<string, string>
+            //        {
+            //            { "en", "Robert Williams" },
+            //            { "fr", "Robert Guillaume" }
+            //        })
+            //    },
+            //    new Customer
+            //    {
+            //        Id = 3,
+            //        Name = new LocalizableString(new Dictionary<string, string>
+            //        {
+            //            { "en", "John Smith" },
+            //            { "fr", "Jean Lefevre" }
+            //        })
+            //    });
         modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
+
+        modelBuilder.HasDbFunction(
+            CustomFilterBinder.GetExtactJsonMethod(), b => b.HasName("jsonb_extract_path_text"));
+    }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder
+            .Properties<LocalizableString>()
+            .HaveConversion<LocalizableStringConverter>()
+            .HaveColumnType("jsonb"); // for Postgres
     }
 }
 
@@ -100,5 +118,41 @@ public static class Extensions
         propertyBuilder.Metadata.SetValueConverter(converter);
         propertyBuilder.Metadata.SetValueComparer(comparer);
         return propertyBuilder;
+    }
+}
+
+public class JsonExtractTextTranslator : IMethodCallTranslator
+{
+    private static readonly MethodInfo _methodInfo = GetExtactJsonMethod();
+
+    private readonly ISqlExpressionFactory _sqlExpressionFactory;
+
+    public JsonExtractTextTranslator(ISqlExpressionFactory sqlExpressionFactory)
+    {
+        _sqlExpressionFactory = sqlExpressionFactory;
+    }
+
+    public SqlExpression Translate(
+        SqlExpression instance,
+        MethodInfo method,
+        IReadOnlyList<SqlExpression> arguments,
+        IDiagnosticsLogger<DbLoggerCategory.Query> logger)
+    {
+        if (method == _methodInfo)
+        {
+            // Create JSONB ->> TEXT translation
+            var jsonColumn = arguments[0];
+            var propertyName = arguments[1];
+
+            return _sqlExpressionFactory.Function(
+                "->>",
+                new[] { jsonColumn, propertyName },
+                nullable: false,
+                argumentsPropagateNullability: null,
+                returnType: typeof(string)
+            );
+        }
+
+        return null!;
     }
 }
