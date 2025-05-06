@@ -95,6 +95,11 @@ public sealed class LocalizableString
         get { return _dictionary[key]; }
     }
 
+    public static explicit operator string(LocalizableString s) =>
+        throw new NotSupportedException("This method is used to support DB query translations and should not be called directly.");// JsonSerializer.Serialize(s);
+    public static explicit operator LocalizableString(string s) =>
+        throw new NotSupportedException("This method is used to support DB query translations and should not be called directly."); //JsonSerializer.Deserialize<LocalizableString>(s);
+
 
     class LocalizableStringJsonConverter : JsonConverter<LocalizableString>
     {

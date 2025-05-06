@@ -9,9 +9,4 @@ public class Customer
     public int Id { get; set; }
     
     public required LocalizableString Name { get; set; }
-
-    //[Column("Name")]
-    [IgnoreDataMember]
-    [JsonIgnore]
-    public string? NameJson { get; set; }
 }

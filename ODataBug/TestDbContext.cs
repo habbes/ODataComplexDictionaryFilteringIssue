@@ -88,10 +88,10 @@ public class TestDbContext(IConfiguration configuration) : DbContext
             CustomFilterBinder.GetJsonExtractMethod())
             .HasName("json_extract");
 
-        modelBuilder.Entity<Customer>()
-        .Property<string>("NameJson") // shadow or real property
-        .HasColumnName("Name") // actual database column
-        .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+        //modelBuilder.Entity<Customer>()
+        //.Property<string>("NameJson") // shadow or real property
+        //.HasColumnName("Name") // actual database column
+        //.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
     }
 }
 
