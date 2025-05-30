@@ -6,6 +6,8 @@ using System.Text.Json.Serialization;
 
 namespace Test;
 
+// We define a custom converter so that we don't expose the internal dictionary
+// when serializing to JSON.
 [JsonConverter(typeof(LocalizableStringJsonConverter))]
 public sealed class LocalizableString
 {

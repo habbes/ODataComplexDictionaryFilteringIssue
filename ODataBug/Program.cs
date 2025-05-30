@@ -16,7 +16,13 @@ builder.Services.AddControllers().AddOData(
     options => options.Select().Filter().OrderBy().Expand().Count().SetMaxTop(null).AddRouteComponents(
         "odata",
         modelBuilder.GetEdmModel(),
-        svc => svc.AddSingleton<IFilterBinder, SqliteCustomFilterBinder>()));
+        svc =>
+        {
+            // Enable this if testing with sqlite database
+            //svc.AddSingleton<IFilterBinder, SqliteCustomFilterBinder>();
+            // Enable this if testing with postgres database
+            svc.AddSingleton<IFilterBinder, PostgresCustomerFilterBinder>();
+        }));
 
 var app = builder.Build();
 

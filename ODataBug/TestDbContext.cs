@@ -28,7 +28,7 @@ public class TestDbContext(IConfiguration configuration) : DbContext
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Trace)
                 .EnableSensitiveDataLogging();
         }
-        else if (dbKind == "posgres")
+        else if (dbKind == "postgres")
         {
             optionsBuilder.UseNpgsql("Host=localhost;Database=TestDb;Username=postgres;Password=postgres")
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Trace)
@@ -88,7 +88,17 @@ public class TestDbContext(IConfiguration configuration) : DbContext
             modelBuilder.HasDbFunction(
                 SqliteCustomFilterBinder.GetJsonExtractMethod());
         }
+        else if (dbKind == "postgres")
+        {
+            // PostgreSQL has native jsonb type, so we can use it directly.
+            // EF core will use the LocalizableString type's JsonConverter to convert name
+            // columns to JSON.
+            modelBuilder.Entity<Customer>().Property(c => c.Name).HasColumnType("jsonb").HasConversion<LocalizableStringJsonConverter>();
 
+            // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping
+            modelBuilder.HasDbFunction(
+                PostgresCustomerFilterBinder.GetJsonExtractMethod());
+        }
     }
 }
 
