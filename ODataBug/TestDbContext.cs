@@ -1,11 +1,12 @@
-﻿using System.Reflection;
-using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Test;
 
@@ -91,9 +92,10 @@ public class TestDbContext(IConfiguration configuration) : DbContext
         else if (dbKind == "postgres")
         {
             // PostgreSQL has native jsonb type, so we can use it directly.
-            // EF core will use the LocalizableString type's JsonConverter to convert name
-            // columns to JSON.
-            modelBuilder.Entity<Customer>().Property(c => c.Name).HasColumnType("jsonb").HasConversion<LocalizableStringJsonConverter>();
+            modelBuilder.Entity<Customer>()
+                .Property(c => c.Name)
+                .HasColumnType("jsonb")
+                .HasConversion<LocalizableStringConverter>();
 
             // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping
             modelBuilder.HasDbFunction(
@@ -121,5 +123,15 @@ public static class Extensions
         propertyBuilder.Metadata.SetValueConverter(converter);
         propertyBuilder.Metadata.SetValueComparer(comparer);
         return propertyBuilder;
+    }
+}
+
+public class LocalizableStringConverter : ValueConverter<LocalizableString, string>
+{
+    public LocalizableStringConverter()
+        : base(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
+            v => JsonSerializer.Deserialize<LocalizableString>(v, (JsonSerializerOptions)null))
+    {
     }
 }
