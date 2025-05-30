@@ -65,6 +65,12 @@ public sealed class LocalizableString
 
     public static explicit operator LocalizableString(string b) => JsonSerializer.Deserialize<LocalizableString>(b);
 
+    public static explicit operator JsonDocument(LocalizableString d)
+    {
+        var json = JsonSerializer.Serialize(d);
+        return JsonDocument.Parse(json);
+    }
+
     internal static bool AreEqual(LocalizableString? left, LocalizableString? right)
     {
         if (left is null && right is null)

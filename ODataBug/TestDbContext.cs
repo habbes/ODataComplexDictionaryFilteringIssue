@@ -44,7 +44,7 @@ public class TestDbContext(IConfiguration configuration) : DbContext
                 o.UseRelationalNulls(true);
             })
                 .ReplaceService<SqlNullabilityProcessor, CustomSqlNullabilityProcessor>() // new
-                .ReplaceService<NpgsqlQuerySqlGenerator, CustomNpgsqlQuerySqlGenerator>() // new
+                //.ReplaceService<NpgsqlQuerySqlGenerator, CustomNpgsqlQuerySqlGenerator>() // new
 
                 .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Trace)
                 .EnableSensitiveDataLogging();
@@ -97,27 +97,48 @@ public class TestDbContext(IConfiguration configuration) : DbContext
                         { "fr", "Jean Lefevre" }
                     })
                 });
+        ;
 
         //.Property(c => c.Name).HasColumnType("jsonb")
-        modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
+        //modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
+        //modelBuilder.Entity<Customer>()
+        //    .OwnsOne(c => c.Name,
+        //        builder => builder.ToJson());
+        //        //.HasConversion<LocalizableStringConverter>());
+
+        modelBuilder.Entity<Customer>()
+            .Property(c => c.Name)
+            .HasColumnType("jsonb");
 
         // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping#mapping-a-method-to-a-custom-sql
         modelBuilder.HasDbFunction(
             CustomFilterBinder.GetExtactJsonMethod())
-            .HasTranslation(
-            args =>
-                new JsonExtractTextExpression(
-                        args.First(),
-                        args.Skip(1).First(),
-                        new StringTypeMapping("jsonb", System.Data.DbType.String)
-                    )
-            );
+            ;
+    //        .HasTranslation(
+    //        args =>
+    //        //args => new SqlFunctionExpression(
+    //        //    functionName: "json_extract_path_text",
+    //        //    arguments: [args[0], args[1]],
+    //        //    nullable: true,
+    //        //    argumentsPropagateNullability: [false, false],
+    //        //    type: typeof(string),
+    //        //    typeMapping: new StringTypeMapping("text", System.Data.DbType.String)
+    //        //    )
+    //        new JsonExtractTextExpression(
+    //                args[0],
+    //                args[1],
+    //                new StringTypeMapping("text", System.Data.DbType.String)
+    //            )
+    //        )
+    //        .HasParameter("json", p => p.HasStoreType("jsonb"))
+    //        .HasParameter("locale", p => p.HasStoreType("text"));
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder
             .Properties<LocalizableString>()
+            
             .HaveConversion<LocalizableStringConverter>()
             .HaveColumnType("jsonb"); // for Postgres
     }
@@ -172,7 +193,9 @@ public class JsonExtractTextExpression : SqlExpression
 
     protected override void Print(ExpressionPrinter expressionPrinter)
     {
+        //expressionPrinter.Append("CAST(");
         expressionPrinter.Visit(JsonColumn);
+        expressionPrinter.Append("::json");
         expressionPrinter.Append(" ->> ");
         expressionPrinter.Visit(Path);
     }
@@ -188,6 +211,7 @@ public class JsonExtractTextExpression : SqlExpression
 
     //    return base.Accept(visitor);
     //}
+
 
     public override bool Equals(object obj)
     {

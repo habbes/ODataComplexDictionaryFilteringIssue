@@ -27,14 +27,16 @@ public class CustomFilterBinder : FilterBinder
             var jsonPath = Expression.Constant(locale);
             var callJsonExtract = Expression.Call(
                 jsonExtractMethod,
-                Expression.Convert(namePropertyAccess, typeof(string)),
+                Expression.Convert(namePropertyAccess, typeof(JsonDocument)),
+                //namePropertyAccess,
                 Expression.Convert(jsonPath, typeof(string))
             );
 
             return callJsonExtract;
         }
 
-        return base.BindDynamicPropertyAccessQueryNode(openNode, context);
+        var expr =  base.BindDynamicPropertyAccessQueryNode(openNode, context);
+        return expr;
 
         //if (node.Source is SingleValuePropertyAccessNode parentNode
         //    && parentNode.Property.Name == "name"
@@ -72,8 +74,13 @@ public class CustomFilterBinder : FilterBinder
         return base.BindCollectionOpenPropertyAccessNode(openCollectionNode, context);
     }
 
-    [DbFunction("json_extract_path", IsBuiltIn = true)]
-    public static string ExtractJson(string json, string locale) => throw new NotSupportedException();
+    // jsonb_extract_path_text ( from_json jsonb, VARIADIC path_elems text[] ) → text
+    // Extracts JSON sub-object at the specified path as text. (This is functionally equivalent to the #>> operator.)
+    // See: https://www.postgresql.org/docs/current/functions-json.html
+    [DbFunction("jsonb_extract_path_text", IsBuiltIn = true)]
+    // Npgsql supports mapping of JsonDocument to jsonb
+    // See: https://www.npgsql.org/efcore/mapping/json.html?tabs=data-annotations%2Cjsondocument#jsondocument-dom-mapping
+    public static string ExtractJson(JsonDocument json, string locale) => throw new NotSupportedException();
 
     public static MethodInfo GetExtactJsonMethod() =>
         typeof(CustomFilterBinder).GetMethod(nameof(ExtractJson), BindingFlags.Static | BindingFlags.Public);
