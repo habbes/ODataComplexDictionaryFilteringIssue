@@ -1,12 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Test;
 
@@ -77,9 +71,10 @@ public class TestDbContext(IConfiguration configuration) : DbContext
         if (dbKind == "sqlite")
         {
             // SQLite does not have a built-in JSON type, JSON values are stored as TEXT.
-            // So we need to do things a bit manually to get things to work.
             // Tells EF Core to convert the Name property to a JSON string in the database
-            modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
+            modelBuilder.Entity<Customer>()
+                .Property(c => c.Name)
+                .HasConversion<LocalizableStringConverter>();
 
             // I had also tried to use the OwnsOne and ToJson() method, but EF Core
             // was not able to translate the expression tree from the filter binder to SQL
@@ -101,28 +96,6 @@ public class TestDbContext(IConfiguration configuration) : DbContext
             modelBuilder.HasDbFunction(
                 PostgresCustomerFilterBinder.GetJsonExtractMethod());
         }
-    }
-}
-
-public static class Extensions
-{
-    private static readonly JsonSerializerOptions _serializerOptions = new JsonSerializerOptions();
-
-    public static PropertyBuilder<LocalizableString> HasJsonConversion(this PropertyBuilder<LocalizableString> propertyBuilder)
-    {
-        var converter = new ValueConverter<LocalizableString, string>(
-            v => JsonSerializer.Serialize(v.ExtendedProperties, _serializerOptions),
-            v => new LocalizableString(JsonSerializer.Deserialize<Dictionary<string, string>>(v, _serializerOptions) ?? new()));
-
-        var comparer = new ValueComparer<LocalizableString>(
-            (l, r) => LocalizableString.AreEqual(l, r),
-            v => JsonSerializer.Serialize(v.ExtendedProperties, _serializerOptions).GetHashCode(),
-            v => new LocalizableString(v.ExtendedProperties.ToDictionary(kvp => kvp.Key, kvp => (string)kvp.Value)));
-
-        propertyBuilder.HasConversion(converter);
-        propertyBuilder.Metadata.SetValueConverter(converter);
-        propertyBuilder.Metadata.SetValueComparer(comparer);
-        return propertyBuilder;
     }
 }
 

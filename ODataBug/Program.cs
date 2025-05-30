@@ -19,9 +19,9 @@ builder.Services.AddControllers().AddOData(
         svc =>
         {
             // Enable this if testing with sqlite database
-            //svc.AddSingleton<IFilterBinder, SqliteCustomFilterBinder>();
+            svc.AddSingleton<IFilterBinder, SqliteCustomFilterBinder>();
             // Enable this if testing with postgres database
-            svc.AddSingleton<IFilterBinder, PostgresCustomerFilterBinder>();
+            //svc.AddSingleton<IFilterBinder, PostgresCustomerFilterBinder>();
         }));
 
 var app = builder.Build();
