@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using Microsoft.EntityFrameworkCore;
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,19 +9,6 @@ namespace Test;
 [JsonConverter(typeof(LocalizableStringJsonConverter))]
 public sealed class LocalizableString
 {
-    //public LocalizableString()
-    //{
-    //}
-
-    //public LocalizableString(IDictionary<string, string> dictionary)
-    //{
-    //    foreach (var kvp in dictionary)
-    //    {
-    //        ExtendedProperties[kvp.Key] = kvp.Value;
-    //    }
-    //}
-
-    //public Dictionary<string, object> ExtendedProperties { get; set; } = new();
     private ReadOnlyDictionary<string, string> _dictionary;
 
 
@@ -95,11 +83,16 @@ public sealed class LocalizableString
         get { return _dictionary[key]; }
     }
 
+    // We create these explicit operatiors to allow the filter binder to
+    // create Convert expressions for the LocalizableString to the type expected by EF Core (string or JsonDocument)
+    // for proper mapping to the native database type.
+    // We don't actually invoke the operators, so we don't need to implement them. But we need to declare
+    // them otherwise we'll get an error when we try to create an Expression.Convert expression.
     public static explicit operator string(LocalizableString s) =>
         throw new NotSupportedException("This method is used to support DB query translations and should not be called directly.");// JsonSerializer.Serialize(s);
-    public static explicit operator LocalizableString(string s) =>
-        throw new NotSupportedException("This method is used to support DB query translations and should not be called directly."); //JsonSerializer.Deserialize<LocalizableString>(s);
-
+    
+    public static explicit operator JsonDocument(LocalizableString s) =>
+        throw new NotSupportedException("This method is used to support DB query translations and should not be called directly.");
 
     class LocalizableStringJsonConverter : JsonConverter<LocalizableString>
     {
@@ -116,21 +109,3 @@ public sealed class LocalizableString
         }
     }
 }
-
-//class LocalizableStringJsonConverter : JsonConverter<LocalizableString>
-//{
-//    public override LocalizableString? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-//    {
-//        var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(ref reader, options);
-//        return new LocalizableString
-//        {
-//            ExtendedProperties = dict ?? new Dictionary<string, object>()
-//        };
-//    }
-
-//    public override void Write(Utf8JsonWriter writer, LocalizableString value, JsonSerializerOptions options)
-//    {
-//        JsonSerializer.Serialize(writer, value.ExtendedProperties, options);
-//    }
-//}
-

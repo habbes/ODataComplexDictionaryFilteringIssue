@@ -4,10 +4,11 @@ using Microsoft.OData.Edm;
 using Microsoft.OData.UriParser;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json;
 
 namespace Test;
 
-public class CustomFilterBinder : FilterBinder
+public class SqliteCustomFilterBinder : FilterBinder
 {
     public override Expression BindDynamicPropertyAccessQueryNode(SingleValueOpenPropertyAccessNode openNode, QueryBinderContext context)
     {
@@ -37,11 +38,16 @@ public class CustomFilterBinder : FilterBinder
         }
         return base.BindDynamicPropertyAccessQueryNode(openNode, context);
     }
+
+    // We map to this method to SQLite's json_extract function.
+    // We have also have to register this method with EF Core so it knows how to translate it to SQL.
+    // See: https://www.sqlite.org/json1.html#the_json_extract_function
+    [DbFunction("json_extract")]
     public static string JsonExtract(string json, string path) =>
         throw new NotSupportedException("This method should not be called client-side. It should be translated to a DB function.");
 
     public static MethodInfo GetJsonExtractMethod() =>
-        typeof(CustomFilterBinder).GetMethod(
+        typeof(SqliteCustomFilterBinder).GetMethod(
             nameof(JsonExtract),
             BindingFlags.Static | BindingFlags.Public,
             [typeof(string), typeof(string)]);

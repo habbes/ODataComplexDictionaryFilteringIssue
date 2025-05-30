@@ -16,7 +16,7 @@ builder.Services.AddControllers().AddOData(
     options => options.Select().Filter().OrderBy().Expand().Count().SetMaxTop(null).AddRouteComponents(
         "odata",
         modelBuilder.GetEdmModel(),
-        svc => svc.AddSingleton<IFilterBinder, CustomFilterBinder>()));
+        svc => svc.AddSingleton<IFilterBinder, SqliteCustomFilterBinder>()));
 
 var app = builder.Build();
 

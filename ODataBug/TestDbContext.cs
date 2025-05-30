@@ -44,14 +44,6 @@ public class TestDbContext(IConfiguration configuration) : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<Customer>()
-            //.OwnsOne(customer => customer.Name,
-            //    nameBuilder =>
-            //    {
-            //        nameBuilder.ToJson();
-            //        nameBuilder.Ignore(n => n.ExtendedProperties);
-            //        //nameBuilder.OwnsOne(n => n.ExtendedProperties);
-            //    }
-            //)
             .HasData(
                 new Customer
                 {
@@ -80,18 +72,23 @@ public class TestDbContext(IConfiguration configuration) : DbContext
                         { "fr", "Jean Lefevre" }
                     })
                 });
-        modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
 
-        // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping
-        // See: https://www.sqlite.org/json1.html#the_json_extract_function
-        modelBuilder.HasDbFunction(
-            CustomFilterBinder.GetJsonExtractMethod())
-            .HasName("json_extract");
+        if (dbKind == "sqlite")
+        {
+            // SQLite does not have a built-in JSON type, JSON values are stored as TEXT.
+            // So we need to do things a bit manually to get things to work.
+            // Tells EF Core to convert the Name property to a JSON string in the database
+            modelBuilder.Entity<Customer>().Property(c => c.Name).HasJsonConversion();
 
-        //modelBuilder.Entity<Customer>()
-        //.Property<string>("NameJson") // shadow or real property
-        //.HasColumnName("Name") // actual database column
-        //.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+            // I had also tried to use the OwnsOne and ToJson() method, but EF Core
+            // was not able to translate the expression tree from the filter binder to SQL
+            // i.e. modelBuilder.Entity<Customer>().OwnsOne(c => c.Name, nameBuilder => nameBuilder.ToJson());
+
+            // See: https://learn.microsoft.com/en-us/ef/core/querying/user-defined-function-mapping
+            modelBuilder.HasDbFunction(
+                SqliteCustomFilterBinder.GetJsonExtractMethod());
+        }
+
     }
 }
 
